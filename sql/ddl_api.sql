@@ -17,7 +17,7 @@ CREATE OR REPLACE FUNCTION  create_hypertable(
     number_partitions       INTEGER = NULL,
     associated_schema_name  NAME = NULL,
     associated_table_prefix NAME = NULL,
-    chunk_time_interval     BIGINT = NULL,
+    chunk_time_interval     anyelement = NULL::bigint,
     create_default_indexes  BOOLEAN = TRUE,
     if_not_exists           BOOLEAN = FALSE
 )
@@ -71,7 +71,7 @@ BEGIN
        IF if_not_exists THEN
           RAISE NOTICE 'hypertable % already exists, skipping', main_table;
               RETURN;
-          ELSE
+        ELSE
               RAISE EXCEPTION 'hypertable % already exists', main_table
               USING ERRCODE = 'IO110';
           END IF;
@@ -91,11 +91,29 @@ BEGIN
     WHERE attrelid = main_table AND attname = time_column_name;
 
     -- Timestamp types can use default value, integral should be an error if NULL
-    IF time_type IN ('TIMESTAMP', 'TIMESTAMPTZ', 'DATE') AND chunk_time_interval IS NULL THEN
-        chunk_time_interval_actual := _timescaledb_internal.interval_to_usec('1 month');
-    ELSIF time_type IN ('SMALLINT', 'INTEGER', 'BIGINT') AND chunk_time_interval IS NULL THEN
-        RAISE EXCEPTION 'chunk_time_interval needs to be explicitly set for types SMALLINT, INTEGER, and BIGINT'
-        USING ERRCODE = 'IO102';
+    IF time_type IN ('TIMESTAMP', 'TIMESTAMPTZ', 'DATE') THEN
+        IF chunk_time_interval IS NULL THEN
+            chunk_time_interval_actual := _timescaledb_internal.interval_to_usec('1 month');
+        ELSIF pg_typeof(chunk_time_interval) IN ('INT'::regtype, 'SMALLINT'::regtype, 'BIGINT'::regtype) THEN
+            chunk_time_interval_actual := chunk_time_interval::BIGINT;
+        ELSIF pg_typeof(chunk_time_interval) = 'INTERVAL'::regtype THEN
+            SELECT (EXTRACT(EPOCH FROM chunk_time_interval)*1000000)::BIGINT
+            INTO STRICT chunk_time_interval_actual;
+        ELSE
+            RAISE EXCEPTION 'chunk_time_interval needs to be an INTERVAL or integer type for TIMESTAMP, TIMESTAMPTZ, or DATE time columns'
+            USING ERRCODE = 'IO102';
+        END IF;
+    ELSIF time_type IN ('SMALLINT', 'INTEGER', 'BIGINT') THEN
+        IF chunk_time_interval IS NULL THEN
+            RAISE EXCEPTION 
+            'chunk_time_interval needs to be explicitly set for time columns of type SMALLINT, INTEGER, and BIGINT'
+            USING ERRCODE = 'IO102';
+        ELSIF pg_typeof(chunk_time_interval) IN ('INT'::regtype, 'SMALLINT'::regtype, 'BIGINT'::regtype) THEN
+            chunk_time_interval_actual := chunk_time_interval::BIGINT;
+        ELSE
+            RAISE EXCEPTION 'chunk_time_interval needs to be an integer type for SMALLINT, INTEGER, and BIGINT time columns'
+            USING ERRCODE = 'IO102';
+        END IF;
     ELSE
         chunk_time_interval_actual := chunk_time_interval;
     END IF;

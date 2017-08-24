@@ -303,7 +303,7 @@ SELECT "1dim" FROM "1dim";
 
 --test that we can insert pre-1970 dates
 CREATE TABLE "1dim_pre1970"(time timestamp PRIMARY KEY, temp float);
-SELECT create_hypertable('"1dim_pre1970"', 'time');
+SELECT create_hypertable('"1dim_pre1970"', 'time', chunk_time_interval=> INTERVAL '1 Month');
  create_hypertable 
 -------------------
  
@@ -494,7 +494,7 @@ CREATE TABLE "inttime_err"(time INTEGER PRIMARY KEY, temp float);
 SELECT create_hypertable('"inttime_err"', 'time', chunk_time_interval=>2147483648);
 ERROR:  chunk_time_interval is too large for type INTEGER (max: 2147483647)
 SELECT create_hypertable('"inttime_err"', 'time');
-ERROR:  chunk_time_interval needs to be explicitly set for types SMALLINT, INTEGER, and BIGINT
+ERROR:  chunk_time_interval needs to be explicitly set for time columns of type SMALLINT, INTEGER, and BIGINT
 \set ON_ERROR_STOP 1
 SELECT create_hypertable('"inttime_err"', 'time', chunk_time_interval=>2147483647);
  create_hypertable 
@@ -508,7 +508,7 @@ CREATE TABLE "smallinttime_err"(time SMALLINT PRIMARY KEY, temp float);
 SELECT create_hypertable('"smallinttime_err"', 'time', chunk_time_interval=>65536);
 ERROR:  chunk_time_interval is too large for type SMALLINT (max: 65535)
 SELECT create_hypertable('"smallinttime_err"', 'time');
-ERROR:  chunk_time_interval needs to be explicitly set for types SMALLINT, INTEGER, and BIGINT
+ERROR:  chunk_time_interval needs to be explicitly set for time columns of type SMALLINT, INTEGER, and BIGINT
 \set ON_ERROR_STOP 1
 SELECT create_hypertable('"smallinttime_err"', 'time', chunk_time_interval=>65535);
  create_hypertable 

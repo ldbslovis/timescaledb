@@ -23,7 +23,7 @@ SELECT "1dim" FROM "1dim";
 
 --test that we can insert pre-1970 dates
 CREATE TABLE "1dim_pre1970"(time timestamp PRIMARY KEY, temp float);
-SELECT create_hypertable('"1dim_pre1970"', 'time');
+SELECT create_hypertable('"1dim_pre1970"', 'time', chunk_time_interval=> INTERVAL '1 Month');
 INSERT INTO "1dim_pre1970" VALUES('1969-12-01T19:00:00', 21.2);
 INSERT INTO "1dim_pre1970" VALUES('1969-12-20T09:00:00', 25.1);
 INSERT INTO "1dim_pre1970" VALUES('1970-01-20T09:00:00', 26.6);
