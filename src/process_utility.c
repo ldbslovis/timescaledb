@@ -269,6 +269,46 @@ reindex_chunk(Oid chunk_relid, void *arg)
 	}
 }
 
+static bool
+process_drop(Node *parsetree)
+{
+	DropStmt *stmt = (DropStmt *) parsetree;
+	ListCell   *cell1;
+	Cache	   *hcache = NULL;
+	bool handled = false;
+
+	if(stmt->removeType != OBJECT_TABLE)
+	{
+		return false;
+	}
+	
+	hcache = hypertable_cache_pin();
+
+	foreach(cell1, stmt->objects)
+	{
+		List	   *object = lfirst(cell1);
+		Oid			relid = RangeVarGetRelid(makeRangeVarFromNameList(object), NoLock, true);
+		if (OidIsValid(relid)){
+			Hypertable *ht;
+
+			ht = hypertable_cache_get_entry(hcache, relid);
+			if (NULL != ht)
+			{
+				if (list_length(stmt->objects) != 1)
+				{
+					elog(ERROR, "Cannot drop a hypertable along with other objects");
+				}
+				OidFunctionCall1(catalog_get_internal_function_id(catalog_get(), DDL_DROP_HYPERTABLE),
+				   Int32GetDatum(ht->fd.id));
+				handled = true;
+			}
+		}
+	}
+
+	cache_release(hcache);
+	return handled;
+}
+
 /*
  * Reindex a hypertable and all its chunks. Currently works only for REINDEX
  * TABLE.
@@ -375,8 +415,8 @@ process_altertable(Node *parsetree)
 				break;
 			case AT_AddIndex:
 				{
-					Assert(IsA(cmd->def, IndexStmt));
 					IndexStmt  *stmt = (IndexStmt *) cmd->def;
+					Assert(IsA(cmd->def, IndexStmt));
 
 					Assert(stmt->isconstraint);
 					process_altertable_add_constraint(ht, stmt->idxname);
@@ -388,8 +428,8 @@ process_altertable(Node *parsetree)
 			case AT_AddConstraint:
 			case AT_AddConstraintRecurse:
 				{
-					Assert(IsA(cmd->def, Constraint));
 					Constraint *stmt = (Constraint *) cmd->def;
+					Assert(IsA(cmd->def, Constraint));
 
 					process_altertable_add_constraint(ht, stmt->conname);
 				}
@@ -438,6 +478,10 @@ timescaledb_ProcessUtility(Node *parsetree,
 			break;
 		case T_RenameStmt:
 			process_rename(parsetree);
+			break;
+		case T_DropStmt:
+			/* drop associated metadata/chunks but also continue on to drop the main table */
+			process_drop(parsetree);
 			break;
 		case T_CopyStmt:
 			if (process_copy(parsetree, query_string, completion_tag))
